@@ -1,7 +1,9 @@
+import 'dart:async'; // ★追加
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:geolocator/geolocator.dart'; // ★追加
 import 'package:permission_handler/permission_handler.dart';
 
 void main() async {
@@ -30,12 +32,21 @@ class _HomeState extends State<Home> {
 
   String _log = '';
 
+  StreamSubscription<Position>? _positionStream; // ★追加
+
   ///
   @override
   void initState() {
     super.initState();
 
     _initNotifications();
+  }
+
+  ///
+  @override
+  void dispose() {
+    _positionStream?.cancel(); // ★追加
+    super.dispose();
   }
 
   ///
@@ -53,7 +64,27 @@ class _HomeState extends State<Home> {
   ///
   Future<void> _requestNotificationPermission() async {
     await Permission.notification.request();
-    setState(() => _log = 'Permission.notification requested');
+    await Permission.location.request(); // ★追加（前景位置）
+    setState(() => _log = 'Permission.notification + location requested'); // ★文言変更（任意）
+  }
+
+  ///
+  void _startLocationStream() {
+    _positionStream?.cancel();
+
+    _positionStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 10),
+        ).listen(
+          (Position pos) {
+            setState(() => _log = '現在地: ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}');
+          },
+          onError: (Object e) {
+            setState(() => _log = '位置取得エラー: $e');
+          },
+        );
+
+    setState(() => _log = 'Location stream started...');
   }
 
   ///
@@ -87,6 +118,8 @@ class _HomeState extends State<Home> {
         child: Column(
           children: <Widget>[
             ElevatedButton(onPressed: _requestNotificationPermission, child: const Text('通知権限リクエスト')),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _startLocationStream, child: const Text('現在地ストリーム開始')), // ★追加
             const SizedBox(height: 12),
             ElevatedButton(onPressed: _showTestNotification, child: const Text('テスト通知を出す')),
             const SizedBox(height: 24),
