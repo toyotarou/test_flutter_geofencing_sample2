@@ -13,28 +13,21 @@ import 'package:permission_handler/permission_handler.dart';
 /// =======================
 @pragma('vm:entry-point')
 Future<void> geofenceCallback(GeofenceCallbackParams params) async {
-  // 背景 isolate で plugin を使うための初期化
-  // （環境によっては不要な場合もあるが、入れておくと安定しやすい）
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    // Flutter 3系で背景isolateからプラグイン呼ぶときの定番
-    // ignore: undefined_function
     DartPluginRegistrant.ensureInitialized();
   } catch (_) {}
 
   final FlutterLocalNotificationsPlugin notifications = FlutterLocalNotificationsPlugin();
 
-  // ✅ initialize は settings: が必須（あなたのエラーの原因）
   const InitializationSettings initSettings = InitializationSettings(
     android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     iOS: DarwinInitializationSettings(),
   );
 
-  await notifications.initialize(settings: initSettings); // :contentReference[oaicite:2]{index=2}
+  await notifications.initialize(settings: initSettings);
 
-  final String stationNames = params.geofences
-      .map((ActiveGeofence g) => g.id)
-      .join(', '); // geofences が正解 :contentReference[oaicite:3]{index=3}
+  final String stationNames = params.geofences.map((ActiveGeofence g) => g.id).join(', ');
 
   final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
     'geofence',
@@ -42,7 +35,6 @@ Future<void> geofenceCallback(GeofenceCallbackParams params) async {
     channelDescription: 'Notify when entering the selected station area',
     importance: Importance.max,
     priority: Priority.high,
-    // const にできないので "Invalid constant value" を避けるため non-const
     vibrationPattern: Int64List.fromList(<int>[0, 800, 200, 800, 200, 1200]),
   );
 
@@ -50,13 +42,12 @@ Future<void> geofenceCallback(GeofenceCallbackParams params) async {
 
   final NotificationDetails details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
-  // ✅ show も id: 必須（あなたのエラーの原因）
   await notifications.show(
     id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     title: '降りる駅アラーム',
     body: '到着（または進入）しました: $stationNames / event=${params.event}',
     notificationDetails: details,
-  ); // :contentReference[oaicite:4]{index=4}
+  );
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,8 +94,6 @@ class _GeofencePageState extends State<GeofencePage> {
   StreamSubscription<Position>? _positionStream;
 
   ///
-  // 山手線（代表30駅ぶん：名称は好みで調整してください）
-  // 座標は概算です。実運用は正確な駅座標に置き換えてください。
   final List<Station> _stations = const <Station>[
     Station('東京', 35.681236, 139.767125),
     Station('神田', 35.691690, 139.770883),
@@ -147,16 +136,14 @@ class _GeofencePageState extends State<GeofencePage> {
 
   ///
   Future<void> _initPlugins() async {
-    // Local notifications init（前景用）
     const InitializationSettings initSettings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     );
 
-    await _notifications.initialize(settings: initSettings); // :contentReference[oaicite:5]{index=5}
+    await _notifications.initialize(settings: initSettings);
 
-    // native_geofence init
-    await NativeGeofenceManager.instance.initialize(); // :contentReference[oaicite:6]{index=6}
+    await NativeGeofenceManager.instance.initialize();
 
     setState(() {
       _log = 'Initialized.';
@@ -165,12 +152,10 @@ class _GeofencePageState extends State<GeofencePage> {
 
   ///
   Future<void> _requestPermissions() async {
-    // 位置情報（前景）
     await Permission.location.request();
-    // 位置情報（常に：バックグラウンド検知に必要）
+
     await Permission.locationAlways.request();
 
-    // 通知（Android 13+ / iOS）
     await Permission.notification.request();
 
     setState(() {
@@ -179,7 +164,6 @@ class _GeofencePageState extends State<GeofencePage> {
   }
 
   ///
-  /// FLP を常時アクティブに保つ位置ストリームを開始する
   void _startLocationStream() {
     _positionStream?.cancel();
     _positionStream =
@@ -207,26 +191,21 @@ class _GeofencePageState extends State<GeofencePage> {
       id: 'station_${s.name}',
       location: Location(latitude: s.lat, longitude: s.lng),
       radiusMeters: 500,
-      // ←「駅で降りタイマー」ならまず 300〜800m が現実的
       triggers: <GeofenceEvent>{GeofenceEvent.enter},
       iosSettings: const IosGeofenceSettings(initialTrigger: true),
       androidSettings: const AndroidGeofenceSettings(
         initialTriggers: <GeofenceEvent>{GeofenceEvent.enter},
         expiration: Duration(days: 7),
-        // dwell は使わないので loiteringDelay は控えめ
         loiteringDelay: Duration(minutes: 1),
         notificationResponsiveness: Duration(seconds: 10),
       ),
     );
 
     try {
-      await NativeGeofenceManager.instance.createGeofence(
-        zone,
-        geofenceCallback,
-      ); // :contentReference[oaicite:7]{index=7}
+      await NativeGeofenceManager.instance.createGeofence(zone, geofenceCallback);
 
       setState(() => _log = 'Registered geofence: ${zone.id}');
-      _startLocationStream(); // FLP を起こしてジオフェンス検知を有効化
+      _startLocationStream();
     } on NativeGeofenceException catch (e) {
       setState(() => _log = 'NativeGeofenceException: code=${e.code} msg=${e.message}');
     } catch (e) {
@@ -267,7 +246,7 @@ class _GeofencePageState extends State<GeofencePage> {
       title: 'テスト通知',
       body: '通知が出れば OK（振動も確認）',
       notificationDetails: NotificationDetails(android: androidDetails, iOS: iosDetails),
-    ); // :contentReference[oaicite:9]{index=9}
+    );
   }
 
   ///
@@ -287,7 +266,7 @@ class _GeofencePageState extends State<GeofencePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Text('山手線から駅を選択', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('駅を選択', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
 
             SizedBox(
